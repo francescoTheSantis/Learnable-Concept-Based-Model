@@ -262,7 +262,7 @@ class CustomDataset(Dataset):
         return image, label, digits
 
 
-def MNIST_addition_loader(batch_size, val_size=0.2, backbone='densenet', seed=42, join=False, dataset='./datasets/', num_workers=3, pin_memory=True, augment=True, shuffle=True):
+def MNIST_addition_loader(batch_size, val_size=0.2, backbone='densenet', seed=42, join=False, dataset='./datasets/', num_workers=3, pin_memory=True, augment=True, shuffle=True, incomplete=False):
 
     mean = (0.4914, 0.4822, 0.4465)
     std = (0.247, 0.243, 0.261)
@@ -274,89 +274,86 @@ def MNIST_addition_loader(batch_size, val_size=0.2, backbone='densenet', seed=42
     train_dataset = datasets.MNIST(root='./datasets/', train=True, download=True)
     test_dataset = datasets.MNIST(root='./datasets/', train=False)
 
-    # Create composed training-set
-    unique_pairs = [str(x)+str(y) for x in range(10) for y in range(10)]
-    X_train = []
-    y_train = []
-    c_train = []
-    y_train_lab = np.array([x[1] for x in train_dataset])
-    y_test_lab = np.array([x[1] for x in test_dataset])
-    y_digits = np.array([x[1] for x in test_dataset])
-    samples_per_permutation = 1000
-    for train_set_pair in unique_pairs:
-        for _ in range(samples_per_permutation):
-            rand_i = np.random.choice(np.where(y_train_lab == int(train_set_pair[0]))[0])
-            rand_j = np.random.choice(np.where(y_train_lab == int(train_set_pair[1]))[0])
-            temp_image = np.zeros((28,56), dtype="uint8")
-            temp_image[:,:28] = train_dataset[rand_i][0]
-            temp_image[:,28:] = train_dataset[rand_j][0]
-            X_train.append(temp_image)
-            y_train.append(y_train_lab[rand_i] + y_train_lab[rand_j])
-            c_train.append([y_train_lab[rand_i], y_train_lab[rand_j]])  
-    
-    # Create composed test-set
-    X_test = []
-    y_test = []
-    c_test = []
-    samples_per_permutation = 100
-    for test_set_pair in unique_pairs:
-        for _ in range(samples_per_permutation):
-            rand_i = np.random.choice(np.where(y_test_lab == int(test_set_pair[0]))[0])
-            rand_j = np.random.choice(np.where(y_test_lab == int(test_set_pair[1]))[0])
-            temp_image = np.zeros((28,56), dtype="uint8")
-            temp_image[:,:28] = test_dataset[rand_i][0]
-            temp_image[:,28:] = test_dataset[rand_j][0]
-            X_test.append(temp_image)
-            y_test.append(y_test_lab[rand_i] + y_test_lab[rand_j])
-            c_test.append([y_test_lab[rand_i], y_test_lab[rand_j]])
-      
-    
-    '''
-    # Create the composed dataset (two images concatenated over the x-axis)
-    unique_pairs = [str(x)+str(y) for x in range(10) for y in range(10)]
-    test_set_pairs = []
-    while(len(test_set_pairs) < 10):
-        pair_to_add = np.random.choice(unique_pairs)
-        if pair_to_add not in test_set_pairs:
-            test_set_pairs.append(pair_to_add)
-    train_set_pairs = list(set(unique_pairs) - set(test_set_pairs))
-    assert(len(test_set_pairs) == 10)
-    assert(len(train_set_pairs) == 90)
-    for test_set in test_set_pairs:
-        assert(test_set not in train_set_pairs)
-        print("%s not in training set." % test_set)
-    X_train = []
-    y_train = []
-    c_train = []
-    y_train_lab = np.array([x[1] for x in train_dataset])
-    y_test_lab = np.array([x[1] for x in test_dataset])
-    y_digits = np.array([x[1] for x in test_dataset])
-    samples_per_permutation = 1000
-    for train_set_pair in train_set_pairs:
-        for _ in range(samples_per_permutation):
-            rand_i = np.random.choice(np.where(y_train_lab == int(train_set_pair[0]))[0])
-            rand_j = np.random.choice(np.where(y_train_lab == int(train_set_pair[1]))[0])
-            temp_image = np.zeros((28,56), dtype="uint8")
-            temp_image[:,:28] = train_dataset[rand_i][0]
-            temp_image[:,28:] = train_dataset[rand_j][0]
-            X_train.append(temp_image)
-            y_train.append(y_train_lab[rand_i] + y_train_lab[rand_j])
-            c_train.append([y_train_lab[rand_i], y_train_lab[rand_j]])
-    X_test = []
-    y_test = []
-    c_test = []
-    for test_set_pair in test_set_pairs:
-        for _ in range(samples_per_permutation):
-            rand_i = np.random.choice(np.where(y_test_lab == int(test_set_pair[0]))[0])
-            rand_j = np.random.choice(np.where(y_test_lab == int(test_set_pair[1]))[0])
-            temp_image = np.zeros((28,56), dtype="uint8")
-            temp_image[:,:28] = test_dataset[rand_i][0]
-            temp_image[:,28:] = test_dataset[rand_j][0]
-            X_test.append(temp_image)
-            y_test.append(y_test_lab[rand_i] + y_test_lab[rand_j])
-            c_test.append([y_test_lab[rand_i], y_test_lab[rand_j]])
-    '''
-    
+    if not incomplete:
+        # Create composed training-set
+        unique_pairs = [str(x)+str(y) for x in range(10) for y in range(10)]
+        X_train = []
+        y_train = []
+        c_train = []
+        y_train_lab = np.array([x[1] for x in train_dataset])
+        y_test_lab = np.array([x[1] for x in test_dataset])
+        y_digits = np.array([x[1] for x in test_dataset])
+        samples_per_permutation = 1000
+        for train_set_pair in unique_pairs:
+            for _ in range(samples_per_permutation):
+                rand_i = np.random.choice(np.where(y_train_lab == int(train_set_pair[0]))[0])
+                rand_j = np.random.choice(np.where(y_train_lab == int(train_set_pair[1]))[0])
+                temp_image = np.zeros((28,56), dtype="uint8")
+                temp_image[:,:28] = train_dataset[rand_i][0]
+                temp_image[:,28:] = train_dataset[rand_j][0]
+                X_train.append(temp_image)
+                y_train.append(y_train_lab[rand_i] + y_train_lab[rand_j])
+                c_train.append([y_train_lab[rand_i], y_train_lab[rand_j]])  
+        
+        # Create composed test-set
+        X_test = []
+        y_test = []
+        c_test = []
+        samples_per_permutation = 100
+        for test_set_pair in unique_pairs:
+            for _ in range(samples_per_permutation):
+                rand_i = np.random.choice(np.where(y_test_lab == int(test_set_pair[0]))[0])
+                rand_j = np.random.choice(np.where(y_test_lab == int(test_set_pair[1]))[0])
+                temp_image = np.zeros((28,56), dtype="uint8")
+                temp_image[:,:28] = test_dataset[rand_i][0]
+                temp_image[:,28:] = test_dataset[rand_j][0]
+                X_test.append(temp_image)
+                y_test.append(y_test_lab[rand_i] + y_test_lab[rand_j])
+                c_test.append([y_test_lab[rand_i], y_test_lab[rand_j]])
+    else:
+        # Create the composed dataset (two images concatenated over the x-axis)
+        unique_pairs = [str(x)+str(y) for x in range(10) for y in range(10)]
+        test_set_pairs = []
+        while(len(test_set_pairs) < 10):
+            pair_to_add = np.random.choice(unique_pairs)
+            if pair_to_add not in test_set_pairs:
+                test_set_pairs.append(pair_to_add)
+        train_set_pairs = list(set(unique_pairs) - set(test_set_pairs))
+        assert(len(test_set_pairs) == 10)
+        assert(len(train_set_pairs) == 90)
+        for test_set in test_set_pairs:
+            assert(test_set not in train_set_pairs)
+            print("%s not in training set." % test_set)
+        X_train = []
+        y_train = []
+        c_train = []
+        y_train_lab = np.array([x[1] for x in train_dataset])
+        y_test_lab = np.array([x[1] for x in test_dataset])
+        y_digits = np.array([x[1] for x in test_dataset])
+        samples_per_permutation = 1000
+        for train_set_pair in train_set_pairs:
+            for _ in range(samples_per_permutation):
+                rand_i = np.random.choice(np.where(y_train_lab == int(train_set_pair[0]))[0])
+                rand_j = np.random.choice(np.where(y_train_lab == int(train_set_pair[1]))[0])
+                temp_image = np.zeros((28,56), dtype="uint8")
+                temp_image[:,:28] = train_dataset[rand_i][0]
+                temp_image[:,28:] = train_dataset[rand_j][0]
+                X_train.append(temp_image)
+                y_train.append(y_train_lab[rand_i] + y_train_lab[rand_j])
+                c_train.append([y_train_lab[rand_i], y_train_lab[rand_j]])
+        X_test = []
+        y_test = []
+        c_test = []
+        for test_set_pair in test_set_pairs:
+            for _ in range(samples_per_permutation):
+                rand_i = np.random.choice(np.where(y_test_lab == int(test_set_pair[0]))[0])
+                rand_j = np.random.choice(np.where(y_test_lab == int(test_set_pair[1]))[0])
+                temp_image = np.zeros((28,56), dtype="uint8")
+                temp_image[:,:28] = test_dataset[rand_i][0]
+                temp_image[:,28:] = test_dataset[rand_j][0]
+                X_test.append(temp_image)
+                y_test.append(y_test_lab[rand_i] + y_test_lab[rand_j])
+                c_test.append([y_test_lab[rand_i], y_test_lab[rand_j]])
     
     if join==False:
         # X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, stratify=y_train, test_size=val_size, random_state=seed)
