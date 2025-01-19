@@ -26,6 +26,7 @@ def main(args):
     # set the seed for torch
     set_seed(args.seed)
     
+    
     # create path for experiment
     #path = f"results/concept_attention/{args.backbone}/{args.dataset}/{args.concept_emb_size}/{str(args.alpha).replace('.','')}/{args.seed}"
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
