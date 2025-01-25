@@ -61,6 +61,12 @@ def main(args):
     elif args.dataset=='MNIST_sum_incomplete':
         train_loader, val_loader, test_loader, test_dataset, _, _ = MNIST_addition_loader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers, incomplete=True)
         classes = None
+    elif args.dataset=='Skin':
+        train_loader, val_loader, test_loader, test_dataset, _, _ = SkinDatasetLoader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers)
+        classes = None
+    elif args.dataset=='CUB200':
+        train_loader, val_loader, test_loader, test_dataset, _, _ = CUB200_loader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers)
+        classes = None
     else:
         raise ValueError('Dataset not yet implemented!')
           

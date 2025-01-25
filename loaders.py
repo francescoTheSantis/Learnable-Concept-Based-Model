@@ -451,3 +451,269 @@ def TinyImagenet_loader(batch_size, val_size=0.2, backbone='densenet', seed=42, 
         print(f"Train dataset size: {len(train_dataset)}")
         print(f"Test dataset size: {len(test_dataset)}")
         return train_loader, test_loader, test_dataset, mean, std
+
+
+class CustomSkinDataset(Dataset):
+    def __init__(self, root, mean, std, phase='train', transform='densenet', augment=True):
+        self.root = os.path.join(root, phase)
+        self.transform = transform
+        self.mean = mean
+        self.std = std
+
+        # Define the mapping of concepts to classes
+        self.class_map = {
+            'Healthy': ['Healthy'],
+            'Benign': ['Actinic keratoses', 'Benign keratosis-like lesions', 'Dermatofibroma',
+                       'Melanocytic nevi', 'Vascular lesions'],
+            'Malignant': ['Basal cell carcinoma', 'Melanoma', 'Squamous cell carcinoma'],
+            'Infectious Diseases': ['Chickenpox', 'Cowpox', 'HFMD', 'Measles', 'Monkeypox']
+        }
+
+        # Define the ordered list of concepts
+        self.concepts = [
+            'Healthy',
+            'Actinic keratoses',
+            'Benign keratosis-like lesions',
+            'Dermatofibroma',
+            'Melanocytic nevi',
+            'Vascular lesions',
+            'Basal cell carcinoma',
+            'Melanoma',
+            'Squamous cell carcinoma',
+            'Chickenpox',
+            'Cowpox',
+            'HFMD',  # Hand, Foot, and Mouth Disease
+            'Measles',
+            'Monkeypox'
+        ]
+
+        # Map concepts to indices
+        self.concept_to_idx = {concept: idx for idx, concept in enumerate(self.concepts)}
+
+        # Map classes to indices
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(self.class_map)}
+
+        # List all images and their respective concepts
+        self.data = []
+        for concept in self.concepts:
+            concept_dir = os.path.join(self.root, concept)
+            if os.path.isdir(concept_dir):
+                for img_name in os.listdir(concept_dir):
+                    img_path = os.path.join(concept_dir, img_name)
+                    self.data.append((img_path, concept))
+
+        # Define transformations
+        if self.transform in ['densenet', 'vit', 'resnet']:
+            if phase == 'train':
+                self.transform = transforms.Compose([
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomRotation(degrees=10), 
+                    transforms.Resize((280, 280)),  # image_size + 1/4 * image_size
+                    transforms.RandomResizedCrop((224,224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(self.mean, self.std)  
+                ])
+            else:
+                self.transform = transforms.Compose([
+                    transforms.Resize((224, 224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(self.mean, self.std)
+                ])
+
+        else:
+            raise ValueError('Backbone not implemented yet :(')
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        img_path, concept = self.data[idx]
+        image = Image.open(img_path).convert('RGB')
+        transformed_image = self.transform(image)
+
+        # Get the class label using class_map
+        class_label = None
+        for cls, concepts in self.class_map.items():
+            if concept in concepts:
+                class_label = self.class_to_idx[cls]
+                break
+
+        if class_label is None:
+            raise ValueError(f"Concept '{concept}' not found in class_map!")
+
+        # Create the concept one-hot array
+        subclass_labels = np.zeros(len(self.concepts), dtype=int)
+        concept_index = self.concept_to_idx[concept]
+        subclass_labels[concept_index] = 1
+
+        return transformed_image, class_label, subclass_labels
+
+ 
+def SkinDatasetLoader(batch_size, backbone='resnet', dataset='./dataset/', num_workers=3, pin_memory=True, augment=True, shuffle=True):
+    mean = (0.4914, 0.4822, 0.4465)
+    std = (0.247, 0.243, 0.261)
+
+    train_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='train', transform=backbone, augment=augment)
+    val_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='val', transform=backbone)
+    test_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='test', transform=backbone)
+
+    # Create loaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Validation dataset size: {len(val_dataset)}")
+    print(f"Test dataset size: {len(test_dataset)}")
+
+    return train_loader, val_loader, test_loader, test_dataset, mean, std
+
+
+class CUBDataset(Dataset):
+    def __init__(self, root_dir, train=False, mean=None, std=None):
+        SELECTED_CONCEPTS = [1, 4, 6, 7, 10, 14, 15, 20, 21, 23, 25, 29, 30, 35, 36, 38, 40, 44, 
+                             45, 50, 51, 53, 54, 56, 57, 59, 63, 64, 69, 70, 72, 75, 80, 84, 90,
+                             91, 93, 99, 101, 106, 110, 111, 116, 117, 119, 125, 126, 131, 132, 
+                             134, 145, 149, 151, 152, 153, 157, 158, 163, 164, 168, 172, 178, 179, 
+                             181, 183, 187, 188, 193, 194, 196, 198, 202, 203, 208, 209, 211, 212, 
+                             213, 218, 220, 221, 225, 235, 236, 238, 239, 240, 242, 243, 244, 249,
+                             253, 254, 259, 260, 262, 268, 274, 277, 283, 289, 292, 293, 294, 298,
+                             299, 304, 305, 308, 309, 310, 311]
+
+        self.root_dir = root_dir
+        self.train = train
+
+        self.mean = mean
+        self.std = std
+
+        
+        if self.train:
+            self.transform = transforms.Compose([
+                        transforms.RandomHorizontalFlip(),
+                        transforms.RandomRotation(degrees=10), 
+                        transforms.Resize((280, 280)),  # image_size + 1/4 * image_size
+                        transforms.RandomResizedCrop((224, 224)),
+                        transforms.ToTensor()
+                    ])
+        else:
+            self.transform = transforms.Compose([
+                    transforms.Resize((224, 224)), 
+                    transforms.ToTensor()
+                ]) 
+        
+        if os.path.isdir(self.root_dir + "/CUB_200_2011") is False:
+            url = "https://data.caltech.edu/records/65de6-vp158/files/CUB_200_2011.tgz?download=1"
+            file_name = "CUB_200_2011.tgz"
+            self._download_file(url, file_name)
+            self._extract_file(file_name, root_dir)
+            os.remove(file_name)
+
+        # Parse the dataset files
+        dataset_dir = root_dir + "/CUB_200_2011"
+        self.image_paths_train = []
+        self.labels_train = []
+        self.image_ids_train = []
+        self.image_paths_test = []
+        self.labels_test = []
+        self.image_ids_test = []
+
+        with open(os.path.join(dataset_dir, "images.txt"), "r") as img_file:
+            image_lines = img_file.readlines()
+        with open(os.path.join(dataset_dir, "image_class_labels.txt"), "r") as label_file:
+            label_lines = label_file.readlines()
+        with open(os.path.join(dataset_dir, "train_test_split.txt"), "r") as split_file:
+            split_lines = split_file.readlines()
+
+        # Initialize a dictionary to hold the boolean arrays for each image
+        self.image_attributes = {}
+        with open(os.path.join(dataset_dir, "./attributes/image_attribute_labels.txt"), "r") as file:
+            for line in file:
+                matches = re.findall(r"\d+\.\d+|\d+", line)
+                image_id, attribute_id, is_present = matches[0], matches[1], matches[2] #line.strip().split(" ")
+                image_id = int(image_id)
+                attribute_id = int(attribute_id)
+                is_present = int(is_present)
+                if image_id not in self.image_attributes:
+                    cnt = 0
+                    self.image_attributes[image_id] = np.zeros(len(SELECTED_CONCEPTS), dtype=float)
+                if attribute_id in SELECTED_CONCEPTS:
+                    self.image_attributes[image_id][cnt] = float(is_present)
+                    cnt += 1
+
+
+        # Extract image paths and labels
+        for img_line, label_line, split_line in zip(image_lines, label_lines, split_lines):
+            img_id, img_path = img_line.strip().split(" ")
+            label_id, label = label_line.strip().split(" ")
+            img2_id, split_id = split_line.strip().split(" ")
+            assert img_id == label_id == img2_id # Ensure consistent IDs
+            if split_id == '1':
+                self.image_ids_train.append(int(img_id))
+                self.image_paths_train.append(os.path.join(dataset_dir, "images", img_path))
+                self.labels_train.append(int(label) - 1)  # Convert to zero-based index
+            else:
+                self.image_ids_test.append(int(img_id))
+                self.image_paths_test.append(os.path.join(dataset_dir, "images", img_path))
+                self.labels_test.append(int(label) - 1)  # Convert to zero-based index
+
+
+    def __len__(self):
+        if self.train:
+            return len(self.image_paths_train)
+        return len(self.image_paths_test)
+    
+    # Step 1: Download the file
+    def _download_file(self, url, file_name):
+        print(f"Downloading {file_name}...")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        with open(file_name, "wb") as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+        print(f"Downloaded {file_name} successfully.")
+
+    # Step 2: Extract the tar.gz file
+    def _extract_file(self, file_name, output_dir):
+        print(f"Extracting {file_name}...")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        with tarfile.open(file_name, "r:gz") as tar:
+            tar.extractall(path=output_dir)
+        print(f"Extracted files to {output_dir}.")
+
+    def __getitem__(self, idx):
+        if self.train:
+            img_path = self.image_paths_train[idx]
+            label = self.labels_train[idx]
+            concepts = torch.from_numpy(self.image_attributes[self.image_ids_train[idx]])
+        else:
+            img_path = self.image_paths_test[idx]
+            label = self.labels_test[idx]
+            concepts = torch.from_numpy(self.image_attributes[self.image_ids_test[idx]])
+        image = Image.open(img_path).convert("RGB")
+        if self.transform:
+            image = self.transform(image)
+        return image, label, concepts
+
+def CUB200_loader(batch_size, val_size=0.1, seed = 42, dataset='./datasets/', num_workers=3, pin_memory=True, augment=True, shuffle=True):
+    generator = torch.Generator().manual_seed(seed) 
+
+    mean = (0.4914, 0.4822, 0.4465)
+    std = (0.247, 0.243, 0.261)
+
+    train_dataset = CUBDataset(root_dir=dataset, train=True, mean=mean, std=std)
+    test_dataset = CUBDataset(root_dir=dataset, train=False, mean=mean, std=std)
+
+    val_size = int(len(train_dataset) * val_size)
+    train_size = len(train_dataset) - val_size
+
+    train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size], generator=generator)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Validation dataset size: {len(val_dataset)}")
+    print(f"Test dataset size: {len(test_dataset)}")
+    
+    return train_loader, val_loader, test_loader, test_dataset, mean, std
