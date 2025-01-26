@@ -366,6 +366,51 @@ class e2e_model(torch.nn.Module):
         img_embeddings = self.backbone(x)
         labels = self.classifier(img_embeddings)
         return labels
+    
+
+class cbm_model(torch.nn.Module):
+    def __init__(
+            self,
+            n_labels,
+            n_concepts,
+            backbone = 'densenet',
+            device='cuda',
+    ):
+        super().__init__()
+        self.device = device
+        
+        if backbone=='vgg':
+            self.backbone = VGG().to(device)
+            self.in_features = 4096   
+        elif backbone=='densenet':
+            self.backbone = DenseNet().to(device)
+            self.in_features = 1920  
+        elif backbone=='vit':
+            self.backbone = ViT().to(device)
+            self.in_features = 768 
+        elif backbone=='resnet':
+            self.backbone = ResNet().to(device)
+            self.in_features = 512
+        else:
+            raise ValueError('Backbone not implemented!')
+
+        freeze_params(self.backbone.parameters())
+
+        self.concept_encoder = torch.nn.Sequential(
+                nn.Linear(self.in_features, self.in_features),
+                nn.ReLU(),
+                nn.Linear(self.in_features, n_concepts),
+            )
+        
+        self.classifier = torch.nn.Sequential(
+                nn.Linear(n_concepts, n_labels)
+            )
+
+    def forward(self, x):
+        img_embeddings = self.backbone(x)
+        concepts = self.concept_encoder(img_embeddings)
+        labels = self.classifier(concepts)
+        return concepts, labels
 
 
 '''
