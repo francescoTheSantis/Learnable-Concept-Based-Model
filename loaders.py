@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt
 import cv2
 from PIL import Image
 from datasets import load_dataset
-
+import os, re
+import requests
+import tarfile
 
 class CustomMNIST(Dataset):
     def __init__(self, root, mean, std, train=True, transform='densenet', augment=True):
@@ -548,7 +550,7 @@ class CustomSkinDataset(Dataset):
 
         return transformed_image, class_label, subclass_labels
 
- 
+
 def SkinDatasetLoader(batch_size, backbone='resnet', dataset='./dataset/', num_workers=3, pin_memory=True, augment=True, shuffle=True):
     mean = (0.4914, 0.4822, 0.4465)
     std = (0.247, 0.243, 0.261)
@@ -556,7 +558,7 @@ def SkinDatasetLoader(batch_size, backbone='resnet', dataset='./dataset/', num_w
     train_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='train', transform=backbone, augment=augment)
     val_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='val', transform=backbone)
     test_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='test', transform=backbone)
-
+    
     # Create loaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
@@ -591,9 +593,10 @@ class CUBDataset(Dataset):
             self.transform = transforms.Compose([
                         transforms.RandomHorizontalFlip(),
                         transforms.RandomRotation(degrees=10), 
-                        transforms.Resize((280, 280)),  # image_size + 1/4 * image_size
-                        transforms.RandomResizedCrop((224, 224)),
-                        transforms.ToTensor()
+                        transforms.Resize(280),  # image_size + 1/4 * image_size
+                        transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
+                        transforms.ToTensor(),
+                        transforms.Normalize(self.mean, self.std)  
                     ])
         else:
             self.transform = transforms.Compose([

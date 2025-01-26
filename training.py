@@ -96,7 +96,7 @@ def train_concept_attention(concept_attention, train_loader, val_loader, test_lo
                 reconstruction_loss = recon_loss(data, z).mean()
                 
             task_loss = task_loss_form(y_pred, labels)
-            gate_penalty = gate_penalty_form(c_logit, alpha)    
+            gate_penalty = gate_penalty_form(c_logit, alpha)
             if epoch<=warm_up:
                 loss = lambda_recon * reconstruction_loss
             else:

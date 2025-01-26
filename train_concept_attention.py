@@ -28,9 +28,10 @@ def main(args):
     
     
     # create path for experiment
-    #path = f"results/concept_attention/{args.backbone}/{args.dataset}/{args.concept_emb_size}/{str(args.alpha).replace('.','')}/{args.seed}"
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    path = f"{args.root_path}/results/concept_attention/{current_time}"
+    path = f"{args.root_path}/results/concept_attention/{args.backbone}/{args.dataset}/{args.seed}"
+    # ath = f"{args.root_path}/results/concept_attention/{args.backbone}/{args.dataset}/{args.concept_emb_size}/{str(args.alpha).replace('.','')}/{args.seed}"
+    #current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    #path = f"{args.root_path}/results/concept_attention/{current_time}"
 
     if not os.path.exists(path):
         os.makedirs(path)
@@ -62,10 +63,10 @@ def main(args):
         train_loader, val_loader, test_loader, test_dataset, _, _ = MNIST_addition_loader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers, incomplete=True)
         classes = None
     elif args.dataset=='Skin':
-        train_loader, val_loader, test_loader, test_dataset, _, _ = SkinDatasetLoader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers)
+        train_loader, val_loader, test_loader, test_dataset, _, _ = SkinDatasetLoader(args.batch_size, args.backbone, num_workers=args.num_workers)
         classes = None
     elif args.dataset=='CUB200':
-        train_loader, val_loader, test_loader, test_dataset, _, _ = CUB200_loader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers)
+        train_loader, val_loader, test_loader, test_dataset, _, _ = CUB200_loader(args.batch_size, args.val_size, num_workers=args.num_workers)
         classes = None
     else:
         raise ValueError('Dataset not yet implemented!')
