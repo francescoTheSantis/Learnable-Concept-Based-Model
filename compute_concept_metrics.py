@@ -20,6 +20,7 @@ from hungarian_algorithm import algorithm
 from transformers import CLIPModel
 from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 import warnings
+from sklearn.cluster import KMeans
 
 warnings.simplefilter("ignore", UserWarning)
 
@@ -293,11 +294,24 @@ def find_best_permutation(predictions, ground_truths, emb, metric='f1'):
         return predictions, avg_acc, avg_f1
         
 
+# Apply clustering to get the thrshold to use for the concept predictions
+def compute_average_threshold(tensor):
+    thresholds = []
+    for col in range(tensor.shape[1]):
+        column_data = tensor[:, col].reshape(-1, 1)
+        kmeans = KMeans(n_clusters=2, random_state=0).fit(column_data)
+        centers = kmeans.cluster_centers_.flatten()
+        threshold = np.mean(centers)
+        thresholds.append(threshold)
+    average_threshold = np.mean(thresholds)
+    return average_threshold
+
 def main():
     parser = argparse.ArgumentParser(description="A script that trains the Concept Attention Model")
     parser.add_argument('--seed', type=int, help="Seed of the experiment")
     parser.add_argument('--backbone', type=str, help="Backbone used for the visual feature extraction")
     parser.add_argument('--dataset', type=str, help="Name of the dataset used for the experiment")
+    parser.add_argument('--method', type=int, help="Methodology used for the experiment")
 
     args = parser.parse_args()    
 
@@ -336,7 +350,10 @@ def main():
 
     # load both concept and task predictions
     pred_concept = np.load(f'{path}/concept_predictions.npy')
-    pred_concept = np.where(pred_concept>0.5,1,0)
+    if args.method in ['cbm_label_free', 'protopnet']:
+        pred_concept = compute_average_threshold(pred_concept)
+    else:
+        pred_concept = np.where(pred_concept>0.5,1,0)
     pred_task = np.load(f'{path}/task_predictions.npy')  
     pred_task = np.argmax(pred_task, axis=1)
     pred_embs = np.load(f'{path}/concept_embeddings.npy')

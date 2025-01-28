@@ -375,10 +375,14 @@ class cbm_model(torch.nn.Module):
             n_concepts,
             backbone = 'densenet',
             device='cuda',
+            label_free = True,
+            task_interpretable = True
     ):
         super().__init__()
         self.device = device
-        
+        self.label_free = label_free
+        self.task_interpretable = task_interpretable
+
         if backbone=='vgg':
             self.backbone = VGG().to(device)
             self.in_features = 4096   
@@ -396,21 +400,36 @@ class cbm_model(torch.nn.Module):
 
         freeze_params(self.backbone.parameters())
 
-        self.concept_encoder = torch.nn.Sequential(
-                nn.Linear(self.in_features, self.in_features),
-                nn.ReLU(),
-                nn.Linear(self.in_features, n_concepts),
-            )
+        if label_free:
+             self.concept_encoder = torch.nn.Sequential(
+                    nn.Linear(self.in_features, self.in_features),
+                    nn.ReLU(),
+                    nn.Linear(self.in_features, n_concepts),
+                )           
+        else:
+            self.concept_encoder = torch.nn.Sequential(
+                    nn.Linear(self.in_features, self.in_features),
+                    nn.ReLU(),
+                    nn.Linear(self.in_features, n_concepts),
+                    nn.Sigmoid()
+                )
         
-        self.classifier = torch.nn.Sequential(
+        if task_interpretable:
+            self.classifier = torch.nn.Sequential(
                 nn.Linear(n_concepts, n_labels)
             )
+        else:
+            self.classifier = torch.nn.Sequential(
+                    nn.Linear(n_concepts, n_concepts),
+                    nn.ReLU(),
+                    nn.Linear(n_concepts, n_labels),
+                )
 
     def forward(self, x):
         img_embeddings = self.backbone(x)
         concepts = self.concept_encoder(img_embeddings)
         labels = self.classifier(concepts)
-        return concepts, labels
+        return labels, concepts
 
 
 '''

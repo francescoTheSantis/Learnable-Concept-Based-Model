@@ -18,8 +18,9 @@ from transformers import CLIPProcessor, CLIPModel
 
 def compute_scores(loader, processor, model, concepts, device):
     all_scores = []
-    for images, _ in loader:
+    for images, _, _ in loader:
         images = images.to(device)
+        images = (images - images.min()) / (images.max() - images.min())
         inputs = processor(text=concepts, images=images, return_tensors="pt", padding=True).to(device)
         outputs = model(**inputs)
         logits_per_image = outputs.logits_per_image
@@ -30,8 +31,13 @@ def compute_scores(loader, processor, model, concepts, device):
 def compute_clip_concept_scores(loader, concepts, device):
     model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-    train_scores = compute_scores(loader, processor, model, concepts, device)
-    return train_scores
+    scores = compute_scores(loader, processor, model, concepts, device)
+    # normalize scores
+    mean = np.mean(scores, axis=0, keepdims=True)
+    std = np.std(scores, axis=0, keepdims=True)
+    scores -= mean
+    scores /= std
+    return scores
 
 class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, original_dataset, scores):
@@ -49,8 +55,9 @@ class CustomDataset(torch.utils.data.Dataset):
 def add_concept_scores_to_loader(loader, concept_names):
     original_dataset = loader.dataset
     scores = compute_clip_concept_scores(loader, concept_names, 'cuda')
+    print(scores[:20,:])
     new_dataset = CustomDataset(original_dataset, scores)
-    new_loader = torch.utils.data.DataLoader(new_dataset, batch_size=loader.batch_size, shuffle=loader.shuffle, num_workers=loader.num_workers)
+    new_loader = torch.utils.data.DataLoader(new_dataset, batch_size=loader.batch_size, num_workers=loader.num_workers)
     return new_loader
 
 
@@ -68,7 +75,7 @@ def main(args):
         print(f"Path created: {path}")
     else:
         print("Path already exists!")
-        
+    
     # Load dataset
     if args.dataset=='CIFAR10':
         train_loader, val_loader, test_loader, test_dataset, _, _ = CIFAR10_loader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers)
@@ -99,8 +106,10 @@ def main(args):
         raise ValueError('Dataset not yet implemented!')
             
     # Load concept names
-    with open(f'{args.root_path}/concepts/{args.dataset}.json') as f:
-        concepts = json.load(f)
+    with open(f'{args.root_path}concept_lists/{args.dataset}.json') as f:
+        concepts = json.load(f)['selected_names']
+
+    n_concepts = len(concepts)
 
     # Add concept scores to the loader
     train_loader = add_concept_scores_to_loader(train_loader, concepts)
@@ -108,40 +117,41 @@ def main(args):
     test_loader = add_concept_scores_to_loader(test_loader, concepts)
 
     # set the seed and initialize concept attention
-    model = cbm_model(args.n_labels, args.backbone, device).to(device)
+    model = cbm_model(args.n_labels, n_concepts, args.backbone, device).to(device)
 
     print('Total number of models\'s parameters:', sum([p.numel() for p in model.parameters()]))
     print('Total number of models\'s trainable parameters:', sum([p.numel() for p in model.parameters() if p.requires_grad]))
 
     params = {
-        "model": model,
-        "train_loader": train_loader, 
-        "val_loader": val_loader, 
-        "test_loader": test_loader,
-        "n_labels": args.n_labels,
-        "lr": args.lr,
-        "num_epochs" : args.num_epochs,
-        "step_size" : args.step_size,
-        "gamma" : args.gamma,
-        "device" : device,
-        "train" : True,
-        "accumulation": args.accumulation,
+        'cbm': model,
+        'train_loader': train_loader,
+        'val_loader': val_loader,
+        'test_loader': test_loader,
+        'n_concepts': n_concepts,
+        'n_labels': args.n_labels,
+        'lr': args.lr,
+        'num_epochs': args.num_epochs,
+        'step_size': args.step_size,
+        'gamma': args.gamma,
+        'verbose': args.verbose,
+        'device': device,
+        'train': True,
         "folder": f"{path}"
     }
 
     # train concept attention
-    cbm, task_losses, task_losses_val, concept_losses, concept_losses_val = train_cbm(**params)
+    cbm, task_losses, concept_losses, task_losses_val, concept_losses_val = train_cbm(**params)
     
     # generate training curves
     dim = (22,5)
-    plot_training_curves(task_losses, task_losses_val, concept_losses, concept_losses_val, None, None, dim, path, 1)
+    #plot_training_curves(task_losses, task_losses_val, concept_losses, concept_losses_val, np.zeros(len(concept_losses_val)), np.zeros(len(concept_losses_val)), dim, path, 1)
 
         # load the best concept attention
     best_cbm = torch.load(f'{path}/cbm.pth')
     
     # make predictions over the test-set
     params["train"] = False
-    params["concept_attention"] = best_cbm
+    params["cbm"] = best_cbm
     c_preds, y_preds, y_true, c_true = train_cbm(**params)  
         
     # store the tensors which are useful for computing the additional metrics
@@ -152,7 +162,7 @@ def main(args):
             tensor = tensor.cpu()
         array = tensor.numpy()
         np.save(f'{path}/{name}.npy', array)
-        
+
     # generate classification report and confusion matrix
     y_true = y_true.cpu().numpy()
     y_preds = y_preds.argmax(-1).detach().cpu().numpy()
