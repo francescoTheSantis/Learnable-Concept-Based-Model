@@ -2,7 +2,7 @@
 # change the seed to perform multiple runs
 
 # MNIST Even-Odd
-python src/train_LCBM.py --seed 0 --num_epochs 1 --binarization_step 20 --n_concepts 10 --concept_emb_size 128 --n_labels 2 --deep_parameterization --expand_recon_bottleneck --backbone "resnet" --alpha 0.1 --dataset "MNIST_even_odd" --lr 1e-4 --step_size 10 --gamma 0.1 --lambda_task 1 --lambda_gate 1 --lambda_recon 1 --verbose 10 --bound 20
+python src/train_LCBM.py --seed 0 --num_epochs 40 --binarization_step 20 --n_concepts 10 --concept_emb_size 128 --n_labels 2 --deep_parameterization --expand_recon_bottleneck --backbone "resnet" --alpha 0.1 --dataset "MNIST_even_odd" --lr 1e-4 --step_size 10 --gamma 0.1 --lambda_task 1 --lambda_gate 1 --lambda_recon 1 --verbose 10 --bound 20
 
 # MNIST Addition
 #python src/train_LCBM.py --seed 0 --num_epochs 40 --binarization_step 20 --n_concepts 10 --concept_emb_size 128 --n_labels 19 --deep_parameterization --expand_recon_bottleneck --backbone "resnet" --alpha 0.2 --dataset "MNIST_sum" --lr 1e-4 --step_size 10 --gamma 0.1 --lambda_task 1 --lambda_gate 1 --lambda_recon 1 --verbose 5 --bound 20

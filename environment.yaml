@@ -1,15 +1,13 @@
 name: lcbm
 channels:
-  - pytorch
-  - nvidia
   - conda-forge
   - defaults
 dependencies:
   - python=3.10
   - pip
   - numpy=1.23
-  - pytorch=2.6  
-  - pytorch-cuda=12.1 
+  - pytorch::pytorch
+  - pytorch::pytorch-cuda
   - torchvision
   - transformers
   - datasets
