@@ -34,17 +34,17 @@ To train and save all models used in the paper:
 
 - LCBM (ours):
 ```bash
-bash run_LCBM.sh
+bash bash_scripts/run_LCBM.sh
 ```
 
 Baselines:
 - BlackBox:
 ```bash
-bash run_E2E.sh
+bash bash_scripts/run_E2E.sh
 ```
 - Label-Free CBM:
 ```bash
-bash run_LF_CBM.sh
+bash bash_scripts/run_LF_CBM.sh
 ```
 For this baseline, the concept have been extracted from GPT-4o and are reported into the `concept_list` folder.
 
@@ -53,8 +53,8 @@ For this baseline, the concept have been extracted from GPT-4o and are reported 
 ### 3. Evaluation & Explanations
 To compute all the metrics and generate explanations:
 ```bash
-bash compute_concept_metrics.sh
-bash run_explanations.sh
+bash bash_scripts/compute_concept_metrics.sh
+bash bash_scripts/run_explanations.sh
 ```
 
 These scripts cover concept alignment, interpretability metrics, and qualitative visualizations such as concept dictionaries and Grad-CAMs.
