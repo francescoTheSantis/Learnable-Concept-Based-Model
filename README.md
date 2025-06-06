@@ -1,4 +1,3 @@
----
 # Learmable Concept-Based Model
 
 This repository contains the official implementation to reproduce the experiments in the paper: [Towards Better Generalization and Interpretability in Unsupervised Concept-Based Models](https://arxiv.org/abs/2506.02092)
