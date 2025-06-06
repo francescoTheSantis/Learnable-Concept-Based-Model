@@ -461,7 +461,7 @@ class CustomSkinDataset(Dataset):
         self.transform = transform
         self.mean = mean
         self.std = std
-
+ 
         # Define the mapping of concepts to classes
         self.class_map = {
             'Healthy': ['Healthy'],
@@ -470,7 +470,7 @@ class CustomSkinDataset(Dataset):
             'Malignant': ['Basal cell carcinoma', 'Melanoma', 'Squamous cell carcinoma'],
             'Infectious Diseases': ['Chickenpox', 'Cowpox', 'HFMD', 'Measles', 'Monkeypox']
         }
-
+ 
         # Define the ordered list of concepts
         self.concepts = [
             'Healthy',
@@ -488,13 +488,13 @@ class CustomSkinDataset(Dataset):
             'Measles',
             'Monkeypox'
         ]
-
+ 
         # Map concepts to indices
         self.concept_to_idx = {concept: idx for idx, concept in enumerate(self.concepts)}
-
+ 
         # Map classes to indices
         self.class_to_idx = {cls: idx for idx, cls in enumerate(self.class_map)}
-
+ 
         # List all images and their respective concepts
         self.data = []
         for concept in self.concepts:
@@ -503,13 +503,13 @@ class CustomSkinDataset(Dataset):
                 for img_name in os.listdir(concept_dir):
                     img_path = os.path.join(concept_dir, img_name)
                     self.data.append((img_path, concept))
-
+ 
         # Define transformations
         if self.transform in ['densenet', 'vit', 'resnet']:
             if phase == 'train':
                 self.transform = transforms.Compose([
                     transforms.RandomHorizontalFlip(),
-                    transforms.RandomRotation(degrees=10), 
+                    transforms.RandomRotation(degrees=10),
                     transforms.Resize((280, 280)),  # image_size + 1/4 * image_size
                     transforms.RandomResizedCrop((224,224)),
                     transforms.ToTensor(),
@@ -521,35 +521,57 @@ class CustomSkinDataset(Dataset):
                     transforms.ToTensor(),
                     transforms.Normalize(self.mean, self.std)
                 ])
-
+ 
         else:
             raise ValueError('Backbone not implemented yet :(')
-
+ 
     def __len__(self):
         return len(self.data)
-
+ 
     def __getitem__(self, idx):
         img_path, concept = self.data[idx]
         image = Image.open(img_path).convert('RGB')
         transformed_image = self.transform(image)
-
+ 
         # Get the class label using class_map
         class_label = None
         for cls, concepts in self.class_map.items():
             if concept in concepts:
                 class_label = self.class_to_idx[cls]
                 break
-
+ 
         if class_label is None:
             raise ValueError(f"Concept '{concept}' not found in class_map!")
-
+ 
         # Create the concept one-hot array
         subclass_labels = np.zeros(len(self.concepts), dtype=int)
         concept_index = self.concept_to_idx[concept]
         subclass_labels[concept_index] = 1
-
+ 
         return transformed_image, class_label, subclass_labels
+ 
 
+    
+def SkinDatasetLoader(batch_size, backbone='resnet', dataset='./dataset/', num_workers=3, pin_memory=True, augment=True, shuffle=True):
+    mean = (0.4914, 0.4822, 0.4465)
+    std = (0.247, 0.243, 0.261)
+ 
+    
+    train_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='train', transform=backbone, augment=augment)
+    val_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='val', transform=backbone)
+    test_dataset = CustomSkinDataset(root=dataset, mean=mean, std=std, phase='test', transform=backbone)
+ 
+    # Create loaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+ 
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Validation dataset size: {len(val_dataset)}")
+    print(f"Test dataset size: {len(test_dataset)}")
+ 
+    return train_loader, val_loader, test_loader, test_dataset, mean, std
+    
 
 def SkinDatasetLoader(batch_size, backbone='resnet', dataset='./dataset/', num_workers=3, pin_memory=True, augment=True, shuffle=True):
     mean = (0.4914, 0.4822, 0.4465)
@@ -593,10 +615,9 @@ class CUBDataset(Dataset):
             self.transform = transforms.Compose([
                         transforms.RandomHorizontalFlip(),
                         transforms.RandomRotation(degrees=10), 
-                        transforms.Resize(280),  # image_size + 1/4 * image_size
-                        transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
-                        transforms.ToTensor(),
-                        transforms.Normalize(self.mean, self.std)  
+                        transforms.Resize((280, 280)),  # image_size + 1/4 * image_size
+                        transforms.RandomResizedCrop((224, 224)),
+                        transforms.ToTensor()
                     ])
         else:
             self.transform = transforms.Compose([
@@ -713,6 +734,7 @@ def CUB200_loader(batch_size, val_size=0.1, seed = 42, dataset='./datasets/', nu
     train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size], generator=generator)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory)
+    
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
     print(f"Train dataset size: {len(train_dataset)}")

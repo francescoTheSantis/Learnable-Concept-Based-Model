@@ -1,0 +1,25 @@
+name: cdm
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy=1.23
+  - pytorch::pytorch
+  - pytorch::pytorch-cuda
+  - torchvision
+  - transformers
+  - datasets
+  - captum
+  - scienceplots
+  - tensorflow
+  - matplotlib
+  - seaborn
+  - scipy
+  - scikit-learn
+  - pip:
+      - opencv-python
+      - scikit-learn-extra
+      - hungarian_algorithm
+      - pandas

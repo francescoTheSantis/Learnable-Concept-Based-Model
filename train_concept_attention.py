@@ -14,24 +14,22 @@ from utilities import *
 from models import *
 from training import *
 from loaders import *
-from datetime import datetime
-
 
 def main(args):
 
     # device check
-    device = torch.cuda.current_device() if torch.cuda.is_available() else "CPU"
+    if torch.cuda.is_available():
+        device = args.device
+    else:
+        device = "CPU"
+        
     print(f'Device: {device}')
     
     # set the seed for torch
     set_seed(args.seed)
     
-    
     # create path for experiment
-    path = f"{args.root_path}/results/concept_attention/{args.backbone}/{args.dataset}/{args.seed}"
-    # ath = f"{args.root_path}/results/concept_attention/{args.backbone}/{args.dataset}/{args.concept_emb_size}/{str(args.alpha).replace('.','')}/{args.seed}"
-    #current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    #path = f"{args.root_path}/results/concept_attention/{current_time}"
+    path = f"{os.getcwd()}/{args.results_folder_name}/concept_attention/{args.backbone}_{args.concept_emb_size}/{args.dataset}/{args.seed}/"        
 
     if not os.path.exists(path):
         os.makedirs(path)
@@ -63,14 +61,15 @@ def main(args):
         train_loader, val_loader, test_loader, test_dataset, _, _ = MNIST_addition_loader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers, incomplete=True)
         classes = None
     elif args.dataset=='Skin':
-        train_loader, val_loader, test_loader, test_dataset, _, _ = SkinDatasetLoader(args.batch_size, args.backbone, num_workers=args.num_workers)
+        data_root = os.path.join(os.getcwd(), "datasets/skin_lesions")
+        train_loader, val_loader, test_loader, test_dataset, _, _ = SkinDatasetLoader(args.batch_size, args.backbone, data_root, num_workers=args.num_workers)
         classes = None
     elif args.dataset=='CUB200':
         train_loader, val_loader, test_loader, test_dataset, _, _ = CUB200_loader(args.batch_size, args.val_size, num_workers=args.num_workers)
         classes = None
     else:
         raise ValueError('Dataset not yet implemented!')
-          
+    
     # initialize concept attention
     concept_attention = Concept_Attention(args.n_concepts, 
                                           args.concept_emb_size, 
@@ -85,7 +84,8 @@ def main(args):
                                           args.bound,
                                           args.multi,
                                           args.concept_encoder,
-                                          args.expand_recon_bottleneck).to(device)
+                                          args.expand_recon_bottleneck,
+                                          args.fine_tune).to(device)
     
     print('Total parameters Concept Attention:', sum([p.numel() for p in concept_attention.parameters()]))
     print('Trainable parameters Concept Attention:', sum([p.numel() for p in concept_attention.parameters() if p.requires_grad]))
@@ -126,7 +126,7 @@ def main(args):
                      reconstruction_losses, reconstruction_losses_val, dim, path, 1)
 
     # load the best concept attention
-    best_concept_attention = torch.load(f'{path}/concept_attention.pth')
+    best_concept_attention = torch.load(f'{path}/concept_attention.pth', weights_only=False)
     
     # make predictions over the test-set
     params["train"] = False
@@ -141,7 +141,7 @@ def main(args):
             tensor = tensor.cpu()
         array = tensor.numpy()
         np.save(f'{path}/{name}.npy', array)
-        
+
     # generate classification report and confusion matrix
     y_true = y_true.cpu().numpy()
     y_preds = y_preds.argmax(-1).detach().cpu().numpy()
@@ -163,13 +163,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="A script that trains the Concept Attention Model")
 
     # parameters relate dto the concept attention
-    parser.add_argument('--seed', type=int, help="Seed of the experiment")
-    parser.add_argument('--n_concepts', type=int, help="Number of concepts")
-    parser.add_argument('--concept_emb_size', type=int, help="Dimension of the concept embeddings")
-    parser.add_argument('--n_labels', type=int, help='Number of classes in the dataset')
-    parser.add_argument('--backbone', type=str, help="Backbone used for the visual feature extraction")
+    parser.add_argument('--seed', type=int, default=2, help="Seed of the experiment")
+    parser.add_argument('--n_concepts', type=int, default=112, help="Number of concepts")
+    parser.add_argument('--concept_emb_size', type=int, default=128, help="Dimension of the concept embeddings")
+    parser.add_argument('--n_labels', type=int, default=200, help='Number of classes in the dataset')
+    parser.add_argument('--backbone', type=str, default='resnet', help="Backbone used for the visual feature extraction")
     parser.add_argument('--alpha', type=float, default=0.1, help="Concept activatin probability")
-    parser.add_argument('--deep_parameterization', action='store_true', default=False, help="Use DNN to compute the weight giventhe concept embedding")
+    parser.add_argument('--deep_parameterization', action='store_true', default=False, help="Use DNN to compute the weight given the concept embedding")
     parser.add_argument('--reconstruct_embedding', action='store_true', default=False, help="Use a decoder that reconstruc the embedding rather than the entire input (image)")
     parser.add_argument('--use_bias', action='store_true', default=False, help="Use bias to make predictions")
 
@@ -178,15 +178,15 @@ if __name__ == '__main__':
     parser.add_argument('--val_size', type=float, default=0.1, help="Percentage of training used as validation")
     parser.add_argument('--size', type=int, default=224, help="Input image hape of the Backbone")
     parser.add_argument('--channels', type=int, default=3, help="Image number of channels of the Backbone")
-    parser.add_argument('--dataset', type=str, help="Name of the dataset used for the experiment")
-    parser.add_argument('--lr', type=float, help="Learning rate")
+    parser.add_argument('--dataset', type=str, default='CUB200', help="Name of the dataset used for the experiment")
+    parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
     parser.add_argument('--num_epochs', type=int, default=40, help="Number of epochs")
-    parser.add_argument('--step_size', type=int, help="Step size of the optimizer")
-    parser.add_argument('--gamma', type=float, help="Gamma of the optimizer")
-    parser.add_argument('--lambda_task', type=float, help="Lambda coefficient of the task term in the loss function")
-    parser.add_argument('--lambda_gate', type=float, help="Lambda coefficient of the KL penalty term in the loss function")
-    parser.add_argument('--lambda_recon', type=float, help="Lambda coefficient of the reconstruction term in the loss function")
-    parser.add_argument('--verbose', type=int, help="Verbosity")
+    parser.add_argument('--step_size', type=int, default=10, help="Step size of the optimizer")
+    parser.add_argument('--gamma', type=float, default=0.1, help="Gamma of the optimizer")
+    parser.add_argument('--lambda_task', type=float, default=1, help="Lambda coefficient of the task term in the loss function")
+    parser.add_argument('--lambda_gate', type=float, default=1, help="Lambda coefficient of the KL penalty term in the loss function")
+    parser.add_argument('--lambda_recon', type=float, default=1, help="Lambda coefficient of the reconstruction term in the loss function")
+    parser.add_argument('--verbose', type=int, default=10, help="Verbosity")
     parser.add_argument('--binarization_step', type=int, default=20, help="After how many epochs to apply the more drstical bernoulli distribution")
     parser.add_argument('--KL_penalty', action='store_true', default=True, help="Use KL divergence as gate penalty term")
     parser.add_argument('--accumulation', type=int, default=0, help="Perform gradient accumulation. If >0 it specify the number of batches to accumulate")
@@ -196,8 +196,10 @@ if __name__ == '__main__':
     parser.add_argument('--multi', action='store_true', default=False, help="Use categorical distribution insted of multiple bernoulli distributions")        
     parser.add_argument('--concept_encoder', type=str, default='attention', help="Use categorical distribution insted of multiple bernoulli distributions")        
     parser.add_argument('--expand_recon_bottleneck', action='store_true', default=False, help="Use categorical distribution insted of multiple bernoulli distributions") 
-    parser.add_argument('--root_path', type='str', default=None, help="Root path where to store the results")       
-
+    parser.add_argument('--results_folder_name', type=str, default='results', help="Name of the Foldr where to store the results")       
+    parser.add_argument('--fine_tune', action='store_true', default=False, help='Whether to fine tuning or not the pre-trained backbone')
+    parser.add_argument('--device', type=int, default=1, help='Device to use for the training')
+    
     args = parser.parse_args()    
 
     main(args)

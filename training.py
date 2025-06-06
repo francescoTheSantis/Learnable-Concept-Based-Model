@@ -75,7 +75,7 @@ def train_concept_attention(concept_attention, train_loader, val_loader, test_lo
     scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     best_val = np.finfo(np.float64).max
     if train==False:
-        task_loss, gate_penalty, reconstruction, c_preds, y_preds, y_true, c_logits, c_true, c_embs = evaluate_concept_attention(concept_attention, test_loader, n_concepts, n_labels, alpha, task_loss_form, recon_loss, gate_penalty_form, reconstruct_embedding)
+        task_loss, gate_penalty, reconstruction, c_preds, y_preds, y_true, c_logits, c_true, c_embs = evaluate_concept_attention(concept_attention, test_loader, n_concepts, n_labels, alpha, task_loss_form, recon_loss, gate_penalty_form, reconstruct_embedding, device)
         print(f"Task: {lambda_task * task_loss};\tGate penalty: {lambda_gate * gate_penalty};\tRecon : {lambda_recon * reconstruction}")        
         return c_preds, y_preds, y_true, c_logits, c_true, reconstruction, c_embs
     for epoch in range(1, num_epochs+1):
@@ -83,6 +83,11 @@ def train_concept_attention(concept_attention, train_loader, val_loader, test_lo
         run_task_loss = 0
         run_gate_penalty_loss = 0
         run_reconstruction_loss = 0
+        print('Bound applied for numerical stability:', concept_attention.bound)
+        if epoch==10 and concept_attention.bound != -1:
+            concept_attention.bound = 50
+        elif epoch==20 and concept_attention.bound == 50:
+            concept_attention.bound = -1
         if epoch==binarization_step:
             print('Binarization applied!')
             concept_attention.b = torch.Tensor([1/3]).to(device)
@@ -122,7 +127,7 @@ def train_concept_attention(concept_attention, train_loader, val_loader, test_lo
         gate_penalty_losses.append(run_gate_penalty_loss/len(train_loader))
         reconstruction_losses.append(run_reconstruction_loss/len(train_loader))
         # evaluate on the validation
-        task_loss_val, gate_penalty_val, reconstruction_val, c_preds, y_preds, y_true, c_logits, c_true, _ = evaluate_concept_attention(concept_attention, val_loader, n_concepts, n_labels, alpha, task_loss_form, recon_loss, gate_penalty_form, reconstruct_embedding)
+        task_loss_val, gate_penalty_val, reconstruction_val, c_preds, y_preds, y_true, c_logits, c_true, _ = evaluate_concept_attention(concept_attention, val_loader, n_concepts, n_labels, alpha, task_loss_form, recon_loss, gate_penalty_form, reconstruct_embedding, device)
         task_losses_val.append(task_loss_val)
         gate_penalty_losses_val.append(gate_penalty_val)
         reconstruction_losses_val.append(reconstruction_val)
@@ -142,7 +147,7 @@ def train_concept_attention(concept_attention, train_loader, val_loader, test_lo
             best_val = selection_loss  
         # evaluate on test: this is done in order to compute the mutual information metric (computed for each epoch)
         if folder != None:
-            _, _, reconstruction_val, c_preds, y_preds, y_true, c_logits, c_true, c_embs = evaluate_concept_attention(concept_attention, test_loader, n_concepts, n_labels, alpha, task_loss_form, recon_loss, gate_penalty_form, reconstruct_embedding)
+            _, _, reconstruction_val, c_preds, y_preds, y_true, c_logits, c_true, c_embs = evaluate_concept_attention(concept_attention, test_loader, n_concepts, n_labels, alpha, task_loss_form, recon_loss, gate_penalty_form, reconstruct_embedding, device)
 
             # store: c_preds, y_preds, y_true, c_true, c_emb
             tensors = [c_preds, y_preds, c_embs]
@@ -237,7 +242,7 @@ def train_e2e(model, train_loader, val_loader, test_loader, n_labels, lr, num_ep
 ################################################
 
 
-def evaluate_cbm(cbm, loaded_set, n_concepts, n_labels, task_loss_form, regularization_loss_form, device='cuda'):
+def evaluate_cbm(cbm, loaded_set, n_concepts, n_labels, task_loss_form, regularization_loss_form, device='cuda', supervised=False):
     cbm.eval()
     run_task_loss = 0
     run_reg_loss = 0
@@ -252,10 +257,17 @@ def evaluate_cbm(cbm, loaded_set, n_concepts, n_labels, task_loss_form, regulari
             alternative_labels = alternative_labels.to(device)
             labels = labels.to(device)
             y_pred, c_pred = cbm(data)
-            
             task_loss = task_loss_form(y_pred, labels)
             
-            regularization_loss = -regularization_loss_form(clip_scores.to(device), c_pred).mean()
+            if supervised:
+                regularization_loss = 0
+                for c_idx in range(n_concepts):
+                    regularization_loss += regularization_loss_form(c_pred[:,c_idx], alternative_labels[:,c_idx].float())
+                regularization_loss = regularization_loss.sum(-1)                
+                regularization_loss = regularization_loss/n_concepts
+                regularization_loss = regularization_loss.mean()
+            else:
+                regularization_loss = -regularization_loss_form(clip_scores.to(device), c_pred).mean()
 
             run_task_loss += task_loss.item()
             run_reg_loss += regularization_loss.item()
@@ -267,7 +279,7 @@ def evaluate_cbm(cbm, loaded_set, n_concepts, n_labels, task_loss_form, regulari
     return run_task_loss/len(loaded_set), regularization_loss/len(loaded_set), c_preds[1:,:], y_preds[1:,:], y_true[1:], c_true[1:,:]
 
 
-def train_cbm(cbm, train_loader, val_loader, test_loader, n_concepts, n_labels, lr, num_epochs, step_size, gamma, verbose=0, device='cuda', train=True, folder=None):
+def train_cbm(cbm, train_loader, val_loader, test_loader, n_concepts, n_labels, lr, num_epochs, step_size, gamma, verbose=0, device='cuda', train=True, folder=None, supervised=False):
     optimizer = optim.Adam(cbm.parameters(), lr=lr)
     task_losses = []
     regularization_losses = []
@@ -281,15 +293,19 @@ def train_cbm(cbm, train_loader, val_loader, test_loader, n_concepts, n_labels, 
     else:
         task_loss_form = nn.CrossEntropyLoss(reduction='mean')
 
-    regularization_loss_form = cos_similarity_cubed_single
+    if supervised:
+        regularization_loss_form = nn.BCELoss(reduction='none')
+    else:
+        regularization_loss_form = cos_similarity_cubed_single
 
     scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     best_val = np.finfo(np.float64).max
     if train==False:
-        task_loss, reg_loss, c_preds, y_preds, y_true, c_true = evaluate_cbm(cbm, test_loader, n_concepts, n_labels, task_loss_form, regularization_loss_form)
+        task_loss, reg_loss, c_preds, y_preds, y_true, c_true = evaluate_cbm(cbm, test_loader, n_concepts, n_labels, task_loss_form, regularization_loss_form, device, supervised)
         print(f"Task: {task_loss};\tRegularization penalty: {reg_loss}")        
         return c_preds, y_preds, y_true, c_true
     for epoch in range(1, num_epochs+1):
+        print('epoch:', epoch)
         cbm.train()
         run_task_loss = 0
         run_reg_loss = 0
@@ -300,8 +316,16 @@ def train_cbm(cbm, train_loader, val_loader, test_loader, n_concepts, n_labels, 
             y_pred, c_pred = cbm(data)
             
             task_loss = task_loss_form(y_pred, labels)
+            regularization_loss = 0
             
-            regularization_loss = -regularization_loss_form(clip_scores.to(device), c_pred).mean()
+            if supervised:
+                for c_idx in range(n_concepts):
+                    regularization_loss += regularization_loss_form(c_pred[:,c_idx], alternative_labels[:,c_idx].float().to(device))
+                regularization_loss = regularization_loss.sum(-1)                
+                regularization_loss = regularization_loss/n_concepts
+                regularization_loss = regularization_loss.mean()
+            else:
+                regularization_loss = -regularization_loss_form(clip_scores.to(device), c_pred).mean()
 
             loss = task_loss + regularization_loss
             loss.backward()
@@ -314,17 +338,20 @@ def train_cbm(cbm, train_loader, val_loader, test_loader, n_concepts, n_labels, 
         task_losses.append(run_task_loss/len(train_loader))
         regularization_losses.append(run_reg_loss/len(train_loader))
         # evaluate on the validation
-        task_loss_val, regularization_loss_val, c_preds, y_preds, y_true, c_true = evaluate_cbm(cbm, val_loader, n_concepts, n_labels, task_loss_form, regularization_loss_form)
+        task_loss_val, regularization_loss_val, c_preds, y_preds, y_true, c_true = evaluate_cbm(cbm, val_loader, n_concepts, n_labels, task_loss_form, regularization_loss_form, device, supervised)
         task_losses_val.append(task_loss_val)
         regularization_losses_val.append(regularization_loss_val)
 
+        if verbose>=1:
+            print('Task loss:', task_loss_val, 'Reg. Loss:', regularization_loss_val)
+        
         if folder != None and task_loss_val<best_val:
             torch.save(cbm, f"{folder}/cbm.pth")  
             best_val = task_loss_val 
 
         # evaluate on test: this is done in order to compute the mutual information metric (computed for each epoch)
         if folder != None:
-            _, _, c_preds, y_preds, y_true, c_true = evaluate_cbm(cbm, test_loader, n_concepts, n_labels, task_loss_form, regularization_loss_form)
+            _, _, c_preds, y_preds, y_true, c_true = evaluate_cbm(cbm, test_loader, n_concepts, n_labels, task_loss_form, regularization_loss_form, device, supervised)
 
             # store: c_preds, y_preds, y_true, c_true, c_emb
             tensors = [c_preds, y_preds, y_true, c_true]
@@ -337,6 +364,11 @@ def train_cbm(cbm, train_loader, val_loader, test_loader, n_concepts, n_labels, 
             if verbose>=1:
                 y_true = y_true.cpu().numpy()
                 y_preds = y_preds.argmax(-1).detach().cpu().numpy()
+                c_true = c_true.cpu().numpy()
+                c_preds = c_preds.cpu().numpy()
+                acc_conc = 0
+                for c in range(n_concepts):
+                    acc_conc = np.mean(y_true==y_preds)
                 print("Task Accuracy:", np.mean(y_true==y_preds))
                 
     return cbm, task_losses, regularization_loss, task_losses_val, regularization_loss_val

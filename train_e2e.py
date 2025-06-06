@@ -15,16 +15,36 @@ from models import *
 from training import *
 from loaders import *
 
+class CustomDataset(torch.utils.data.Dataset):
+    def __init__(self, original_dataset):
+        self.original_dataset = original_dataset
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        image, concept, label = self.original_dataset[idx]
+        return image, concept, label
+    
+def add_concept_scores_to_loader(loader):
+    original_dataset = loader.dataset
+    new_dataset = CustomDataset(original_dataset)
+    new_loader = torch.utils.data.DataLoader(new_dataset, batch_size=loader.batch_size, num_workers=loader.num_workers)
+    return new_loader
 
 def main(args):
   
     # device check
-    device = torch.cuda.current_device() if torch.cuda.is_available() else "CPU"
+    if torch.cuda.is_available():
+        device = args.device
+    else:
+        device = "CPU"
+        
     print(f'Device: {device}')
     
     # create path for experiment
-    path = f"{args.root_path}/results/e2e/{args.backbone}/{args.dataset}/{args.seed}"
-
+    path = f"{args.results_folder_name}/results/e2e/{args.backbone}/{args.dataset}/{args.seed}"   
+    
     if not os.path.exists(path):
         os.makedirs(path)
         print(f"Path created: {path}")
@@ -51,7 +71,7 @@ def main(args):
         train_loader, val_loader, test_loader, test_dataset, _, _ = MNIST_addition_loader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers, incomplete=True)
         classes = None
     elif args.dataset=='Skin':
-        data_root = os.path.join(args.root_path, "datasets/skin_lesions")
+        data_root = os.path.join(os.getcwd(), "datasets/skin_lesions")
         train_loader, val_loader, test_loader, test_dataset, _, _ = SkinDatasetLoader(args.batch_size, args.backbone, data_root, num_workers=args.num_workers)
         classes = None
     elif args.dataset=='CUB200':
@@ -59,9 +79,9 @@ def main(args):
         classes = None
     else:
         raise ValueError('Dataset not yet implemented!')
-        
+    
     # set the seed and initialize concept attention
-    model = e2e_model(args.n_labels, args.backbone, device).to(device)
+    model = e2e_model(args.n_labels, args.backbone, device, args.fine_tune).to(device)
 
     print('Total number of models\'s parameters:', sum([p.numel() for p in model.parameters()]))
     print('Total number of models\'s trainable parameters:', sum([p.numel() for p in model.parameters() if p.requires_grad]))
@@ -79,7 +99,8 @@ def main(args):
         "device" : device,
         "train" : True,
         "accumulation": args.accumulation,
-        "folder": f"{path}"
+        "folder": f"{path}",
+        "verbose": args.verbose
     }
 
     # train concept attention
@@ -130,7 +151,9 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', type=int, help="Verbosity")
     parser.add_argument('--accumulation', type=int, default=0, help="Perform gradient accumulation. If >0 it specify the number of batches to accumulate")
     parser.add_argument('--num_workers', type=int, default=3, help="Specifies the number of workers used by the data loader.")
-    parser.add_argument('--root_path', type=str, default='./data', help="Specifies the root directory of the dataset.")
+    parser.add_argument('--results_folder_name', type=str, default='results', help="Name of the Foldr where to store the results") 
+    parser.add_argument('--fine_tune', action='store_true', default=False, help='Whether to fine tuning or not the pre-trained backbone')
+    parser.add_argument('--device', type=int, default=1, help='Device to use for the training')
 
     args = parser.parse_args()  
     main(args)

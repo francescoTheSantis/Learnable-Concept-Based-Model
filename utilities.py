@@ -25,7 +25,7 @@ from matplotlib.gridspec import GridSpec
 import scienceplots
 from scipy.ndimage import zoom
 
-plt.style.use(['science', 'ieee'])
+plt.style.use(['science', 'ieee', 'no-latex'])
 
 def set_seed(seed):
     
@@ -78,22 +78,14 @@ def cos_similarity_cubed_single(clip_feats, target_feats):
 
 
 def KL_divergence(logit, alpha):
+    n_concepts = logit.shape[1]
     # get the probability form the logit and compute the average over the batch dimension
     pi = torch.sigmoid(logit).mean(dim=0)
     first_term = (1 - pi) * torch.log(clamp(1-pi)/(1-alpha))
     second_term = pi * torch.log(clamp(pi)/alpha) 
     kl_div = (first_term + second_term).sum()
+    kl_div = kl_div/(n_concepts)**0.5
     return kl_div
-
-'''
-def KL_divergence(logit, alpha):
-    pi = torch.sigmoid(logit)
-    first_term = (1 - pi) * torch.log(clamp(1-pi)/(1-alpha))
-    second_term = pi * torch.log(clamp(pi)/alpha) 
-    kl_div = (first_term + second_term).sum(dim=-1) 
-    return kl_div.mean()
-'''
-
 
 def Gate_penalty(logit, alpha=None):
     pi = torch.sigmoid(logit)
@@ -223,49 +215,6 @@ def concept_dist_per_label(n_labels, y_preds, c_preds, folder=None, dim = (25,4)
                 break
             cnt+=1
         print()
-        
-
-'''
-def sample_explanation(model, test_dataset, n_concepts, idx, folder, dim=(5,5), device='cuda', classes=None):
-    img = test_dataset[idx][0]
-    img = img.to(device).unsqueeze(0)
-    y_pred, logits, c_emb, c_preds, c_logit, _, _ = model(img)
-    concept_idxs = torch.argwhere(c_preds.squeeze()>0.5).squeeze().cpu().numpy()
-    prediction = int(torch.argmax(y_pred).cpu().detach().numpy())
-    importance_values = logits[0, :, prediction].cpu().detach().numpy()
-    if concept_idxs.size==1:
-        concept_idxs = np.expand_dims(concept_idxs,0)
-    if concept_idxs.size>0:
-        fig, ax = plt.subplots(1, 2)
-        fig.set_size_inches(dim)
-        model.eval()
-        i = 0
-        ax[i].set_ylabel(f'image {idx}')
-        ax[i].set_xticklabels([])
-        ax[i].set_yticklabels([])
-        i += 1
-        if classes != None:
-            ax[i].set_title(f'Pred: {classes[prediction]}')
-        else:
-            ax[i].set_title(f'Pred: {prediction}')
-        colors = np.where(importance_values >= 0, 'blue', 'red')
-        ax[i].barh([f'Concept_{x}' for x in range(n_concepts)], importance_values, color=colors)
-        ax[i].axvline(x=importance_values.sum(), color='tab:green', linestyle='--', label='Logit sum')
-        ax[i].axvline(x=0, color='black', linestyle='-')
-        ax[i].set_xlabel('')
-        ax[i].set_ylabel('')
-        img = img.permute(0,2,3,1)[0,:,:,:].cpu().detach().numpy()
-        img = (img - img.min()) / (img.max() - img.min())
-        ax[0].imshow(img)
-        ax[0].set_title('Original')
-        plt.tight_layout()
-        
-        if folder != None:
-            plt.savefig(folder+f"/sample_{idx}_activations.pdf")
-        plt.show() 
-'''    
-    
-    
     
 def sample_explanation(model, test_logits, test_dataset, n_concepts, idx, folder, dim=(5,5), device='cuda', classes=None, alpha=0.3):    
     original_idx = int(idx)
@@ -280,7 +229,7 @@ def sample_explanation(model, test_logits, test_dataset, n_concepts, idx, folder
         original_label = int(test_dataset[original_idx][1])       
     img = img.to(device).unsqueeze(0)
     y_pred, logits, _, c_pred, c_logit, _, _ = model(img)
-    
+
     #concept_idxs = torch.argwhere(c_logit.squeeze()>0)
     concept_idxs = torch.argsort(c_logit.squeeze(), descending=True).cpu().numpy()
     prediction = int(torch.argmax(y_pred).cpu().detach().numpy())
@@ -321,7 +270,7 @@ def sample_explanation(model, test_logits, test_dataset, n_concepts, idx, folder
         grads_path.append(f'{folder}/concept_{concept_idx}.png')
 
     fig, axs = plt.subplots(1,2)
-    fig.set_size_inches((10,5))
+    fig.set_size_inches((11,5))
     ax=axs[0]
     
     model.eval()
@@ -336,24 +285,19 @@ def sample_explanation(model, test_logits, test_dataset, n_concepts, idx, folder
     ax.set_yticklabels([])
     ax.minorticks_off()
     ax.axis('off')
-    ax.set_title(f'Label: {original_label}', fontsize=22)
     #plt.savefig(f'{folder}/original_image.png')
 
     ax = axs[1]
-    
-    if classes != None:
-        ax.set_title(f'Pred: {classes[prediction]}')
-    else:
-        ax.set_title(f'Pred: {prediction}', fontsize=22)
-        
+    ax.set_title(f'Class: {original_label}', fontsize=30)
+
     importance_values = [importance_values[x] for i, x in enumerate(concept_idxs[:3])]
     colors = ['blue' if x>=0 else 'red' for x in importance_values] #np.where(importance_values >= 0, 'blue', 'red')
     ax.barh([f'Concept_{x}' for x in range(n_concepts) if x in concept_idxs[:3]], 
             importance_values, color=colors)
-    ax.axvline(x=sum(importance_values), color='tab:green', linestyle='--', label='Logit sum')
+    #ax.axvline(x=sum(importance_values), color='tab:green', linestyle='--', label='Logit sum')
     ax.axvline(x=0, color='black', linestyle='-')
-    ax.set_xlabel('Importance', fontsize=20)
-    ax.tick_params(axis='x', labelsize=18)
+    ax.set_xlabel('Importance', fontsize=30)
+    ax.tick_params(axis='x', labelsize=28)
     ax.set_ylabel('')
     ax.minorticks_off()
 
@@ -363,10 +307,10 @@ def sample_explanation(model, test_logits, test_dataset, n_concepts, idx, folder
 
     # Add images to y-ticks
     for i in range(3):
-        imagebox = OffsetImage(grad_imgs[i], zoom=0.03)  # Adjust zoom as needed
-        ab = AnnotationBbox(imagebox, (0, i), frameon=False, box_alignment=(1.1, 0.5))
+        imagebox = OffsetImage(grad_imgs[i], zoom=0.045)  # Adjust zoom as needed
+        ab = AnnotationBbox(imagebox, (0, i), frameon=False, box_alignment=(1.03, 0.5))
         ax.add_artist(ab)
-    
+
     #plt.tight_layout()
     #plt.savefig(f'{folder}/explanatoin.pdf')
     plt.subplots_adjust(wspace=0.5)
@@ -403,24 +347,24 @@ def learned_concepts(model, c_logits, test_dataset, K, n_concepts, folder=None, 
         for idx, image_idx in enumerate(top_k_indices.cpu().numpy()):
             img = test_dataset[int(image_idx)][0].unsqueeze(0).to(device)
             
-            '''
+            
             # create gradcam
             img.requires_grad_()
             layer_gradcam = LayerGradCam(model, target_layer)
 
             attributions_lgc = layer_gradcam.attribute(img, additional_forward_args=True, target=concept)
             upsamp_attr_lgc = LayerGradCam.interpolate(attributions_lgc, img.shape[2:]).squeeze().cpu().detach().numpy()
-            '''
+            
             
             #print(img.shape)
             img = img[0,:,:,:].permute(1,2,0).cpu().detach().numpy()
             img = (img - img.min()) / (img.max() - img.min())
             ax[idx, j].imshow(img)
-            '''
+            
             ax[idx, j].imshow(upsamp_attr_lgc, cmap='RdYlGn', alpha=alpha)
-            '''
+            
             if idx==0:
-                ax[idx, j].set_title(f'C{j}', fontsize=10)
+                ax[idx, j].set_title(f'C{j}', fontsize=12)
             else:
                 ax[idx, j].set_title('')
             
@@ -429,15 +373,16 @@ def learned_concepts(model, c_logits, test_dataset, K, n_concepts, folder=None, 
     plt.subplots_adjust(wspace=0, hspace=0, left=0, right=1, bottom=0, top=1)
     
     if folder != None:
+        folder = os.path.join(folder, 'dictionary')
         if not os.path.exists(folder):
             os.makedirs(folder)        
-        plt.savefig(folder+'/concept_activations.pdf')
+        plt.savefig(folder+f'/concept_activations_{alpha}.pdf')
     plt.show()
     
     
     
     
-    
+
 
 ################################################################################
 ## Metrics utilities

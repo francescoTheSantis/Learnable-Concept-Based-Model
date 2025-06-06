@@ -15,10 +15,11 @@ from models import *
 from training import * 
 from loaders import *
 from transformers import CLIPProcessor, CLIPModel
+from tqdm import tqdm
 
 def compute_scores(loader, processor, model, concepts, device):
     all_scores = []
-    for images, _, _ in loader:
+    for images, _, _ in tqdm(loader):
         images = images.to(device)
         images = (images - images.min()) / (images.max() - images.min())
         inputs = processor(text=concepts, images=images, return_tensors="pt", padding=True).to(device)
@@ -30,6 +31,8 @@ def compute_scores(loader, processor, model, concepts, device):
 
 def compute_clip_concept_scores(loader, concepts, device):
     model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+    for param in model.parameters():
+        param.requires_grad = False
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
     scores = compute_scores(loader, processor, model, concepts, device)
     # normalize scores
@@ -52,10 +55,9 @@ class CustomDataset(torch.utils.data.Dataset):
         score = self.scores[idx]
         return image, concept, label, score
     
-def add_concept_scores_to_loader(loader, concept_names):
+def add_concept_scores_to_loader(loader, concept_names, device):
     original_dataset = loader.dataset
-    scores = compute_clip_concept_scores(loader, concept_names, 'cuda')
-    print(scores[:20,:])
+    scores = compute_clip_concept_scores(loader, concept_names, device)
     new_dataset = CustomDataset(original_dataset, scores)
     new_loader = torch.utils.data.DataLoader(new_dataset, batch_size=loader.batch_size, num_workers=loader.num_workers)
     return new_loader
@@ -64,18 +66,20 @@ def add_concept_scores_to_loader(loader, concept_names):
 def main(args):
   
     # device check
-    device = torch.cuda.current_device() if torch.cuda.is_available() else "CPU"
-    print(f'Device: {device}')
+    if torch.cuda.is_available():
+        device = args.device
+    else:
+        device = "CPU"
     
     # create path for experiment
-    path = f"{args.root_path}/results/cbm/{args.backbone}/{args.dataset}/{args.seed}"
+    path = f"{os.getcwd()}/{args.results_folder_name}/lf_cbm/{args.backbone}/{args.dataset}/{args.seed}/"        
 
     if not os.path.exists(path):
         os.makedirs(path)
         print(f"Path created: {path}")
     else:
         print("Path already exists!")
-    
+
     # Load dataset
     if args.dataset=='CIFAR10':
         train_loader, val_loader, test_loader, test_dataset, _, _ = CIFAR10_loader(args.batch_size, args.val_size, args.backbone, num_workers=args.num_workers)
@@ -104,20 +108,21 @@ def main(args):
         classes = None
     else:
         raise ValueError('Dataset not yet implemented!')
-            
+
     # Load concept names
-    with open(f'{args.root_path}concept_lists/{args.dataset}.json') as f:
+    with open(f'{os.getcwd()}/concept_lists/{args.dataset}.json') as f:
         concepts = json.load(f)['selected_names']
 
     n_concepts = len(concepts)
 
     # Add concept scores to the loader
-    train_loader = add_concept_scores_to_loader(train_loader, concepts)
-    val_loader = add_concept_scores_to_loader(val_loader, concepts)
-    test_loader = add_concept_scores_to_loader(test_loader, concepts)
+    train_loader = add_concept_scores_to_loader(train_loader, concepts, args.device)
+    val_loader = add_concept_scores_to_loader(val_loader, concepts, args.device)
+    test_loader = add_concept_scores_to_loader(test_loader, concepts, args.device)
 
     # set the seed and initialize concept attention
-    model = cbm_model(args.n_labels, n_concepts, args.backbone, device).to(device)
+    label_free_approach = not args.supervised
+    model = cbm_model(args.n_labels, n_concepts, args.backbone, device, label_free_approach, True, args.fine_tune).to(device)
 
     print('Total number of models\'s parameters:', sum([p.numel() for p in model.parameters()]))
     print('Total number of models\'s trainable parameters:', sum([p.numel() for p in model.parameters() if p.requires_grad]))
@@ -136,7 +141,8 @@ def main(args):
         'verbose': args.verbose,
         'device': device,
         'train': True,
-        "folder": f"{path}"
+        "folder": f"{path}",
+        "supervised": args.supervised,
     }
 
     # train concept attention
@@ -147,7 +153,7 @@ def main(args):
     #plot_training_curves(task_losses, task_losses_val, concept_losses, concept_losses_val, np.zeros(len(concept_losses_val)), np.zeros(len(concept_losses_val)), dim, path, 1)
 
         # load the best concept attention
-    best_cbm = torch.load(f'{path}/cbm.pth')
+    best_cbm = torch.load(f'{path}/cbm.pth', weights_only=False)
     
     # make predictions over the test-set
     params["train"] = False
@@ -183,24 +189,27 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="A script that trains the Concept Attention Model")
 
     # parameters relate dto the concept attention
-    parser.add_argument('--seed', type=int, help="Seed of the experiment")
-    parser.add_argument('--n_labels', type=int, help='Number of classes in the dataset')
-    parser.add_argument('--backbone', type=str, help="Backbone used for the visual feature extraction")
+    parser.add_argument('--seed', type=int, default=0, help="Seed of the experiment")
+    parser.add_argument('--n_labels', type=int, default=200, help='Number of classes in the dataset')
+    parser.add_argument('--backbone', type=str, default='resnet', help="Backbone used for the visual feature extraction")
 
     # parameters related to the preprocessing and training
-    parser.add_argument('--batch_size', type=int, help="Size of the batch")
+    parser.add_argument('--batch_size', type=int, default=128, help="Size of the batch")
     parser.add_argument('--val_size', type=float, default=0.1, help="Percentage of training used as validation")
     parser.add_argument('--size', type=int, default=224, help="Input image hape of the Backbone")
     parser.add_argument('--channels', type=int, default=3, help="Image number of channels of the Backbone")
-    parser.add_argument('--dataset', type=str, help="Name of the dataset used for the experiment")
-    parser.add_argument('--lr', type=float, help="Learning rate")
+    parser.add_argument('--dataset', type=str, default='CUB200', help="Name of the dataset used for the experiment")
+    parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
     parser.add_argument('--num_epochs', type=int, default=40, help="Number of epochs")
-    parser.add_argument('--step_size', type=int, help="Step size of the optimizer")
+    parser.add_argument('--step_size', type=int, default=10, help="Step size of the optimizer")
     parser.add_argument('--gamma', type=float, help="Gamma of the optimizer")
-    parser.add_argument('--verbose', type=int, help="Verbosity")
+    parser.add_argument('--verbose', type=int, default=1, help="Verbosity")
     parser.add_argument('--accumulation', type=int, default=0, help="Perform gradient accumulation. If >0 it specify the number of batches to accumulate")
     parser.add_argument('--num_workers', type=int, default=3, help="Specifies the number of workers used by the data loader.")
-    parser.add_argument('--root_path', type=str, default='./data', help="Specifies the root directory of the dataset.")
+    parser.add_argument('--results_folder_name', type=str, default='results', help="Name of the Foldr where to store the results")       
+    parser.add_argument('--supervised', action='store_true', default=False, help="Specifies if the model is trained in a supervised way (over the concepts).")
+    parser.add_argument('--device', type=int, default=0, help='Device to use for the training')
+    parser.add_argument('--fine_tune', action='store_true', default=False, help='Whether to fine tuning or not the pre-trained backbone')
 
     args = parser.parse_args()  
     main(args)

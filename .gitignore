@@ -1,0 +1,12 @@
+\archive
+\datasets
+\emb_ablation
+\figs
+\results
+\survey_results
+\results
+\metric_results
+\.ipynb_checkpoints
+\__pycache__
+\*.ipynb
+\*.pyc
