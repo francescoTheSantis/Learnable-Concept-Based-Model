@@ -184,6 +184,9 @@ def intervention(path, loaded_test, trues, prop_list, device, args):
     return df
 
 
+# We used the 'concept_alignment_score' function implemented by the authors of CEM.
+# link: https://github.com/mateoespinosa/cem
+
 def concept_alignment_score(
     c_vec,
     c_test,
@@ -378,9 +381,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="A script that trains the Concept Attention Model")
     parser.add_argument('--seed', type=int, default=0, help="Seed of the experiment")
-    parser.add_argument('--backbone', type=str, default='resnet', help="Backbone used for the visual feature extraction")
+    parser.add_argument('--backbone', type=str, default='resnet_128', help="Backbone used for the visual feature extraction")
     parser.add_argument('--dataset', type=str, default='MNIST_even_odd', help="Name of the dataset used for the experiment")
-    parser.add_argument('--method', type=str, default='lf_cbm', help="Methodology used for the experiment")
+    parser.add_argument('--method', type=str, default='concept_attention', help="Methodology used for the experiment")
     parser.add_argument('--device', type=int, default=1, help="Device used for the experiment")
     args = parser.parse_args()  
     main(args)

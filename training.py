@@ -10,7 +10,7 @@ from utilities import *
 from models import * 
 
 #####################################
-################ CDM ################
+############### LCBM ################
 #####################################
 
 def evaluate_concept_attention(concept_attention, loaded_set, n_concepts, n_labels, alpha, task_loss_form, recon_loss, gate_penalty_form, reconstruct_embedding, device='cuda'):

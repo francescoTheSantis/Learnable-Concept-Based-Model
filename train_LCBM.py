@@ -29,7 +29,7 @@ def main(args):
     set_seed(args.seed)
     
     # create path for experiment
-    path = f"{os.getcwd()}/{args.results_folder_name}/concept_attention/{args.backbone}_{args.concept_emb_size}/{args.dataset}/{args.seed}/"        
+    path = f"{os.getcwd()}/{args.results_folder_name}/concept_attention/{args.backbone}/{args.dataset}/{args.seed}/"        
 
     if not os.path.exists(path):
         os.makedirs(path)
@@ -162,7 +162,6 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="A script that trains the Concept Attention Model")
 
-    # parameters relate dto the concept attention
     parser.add_argument('--seed', type=int, default=2, help="Seed of the experiment")
     parser.add_argument('--n_concepts', type=int, default=112, help="Number of concepts")
     parser.add_argument('--concept_emb_size', type=int, default=128, help="Dimension of the concept embeddings")
@@ -172,8 +171,6 @@ if __name__ == '__main__':
     parser.add_argument('--deep_parameterization', action='store_true', default=False, help="Use DNN to compute the weight given the concept embedding")
     parser.add_argument('--reconstruct_embedding', action='store_true', default=False, help="Use a decoder that reconstruc the embedding rather than the entire input (image)")
     parser.add_argument('--use_bias', action='store_true', default=False, help="Use bias to make predictions")
-
-    # parameters related to the preprocessing and training
     parser.add_argument('--batch_size', type=int, default=128, help="Size of the batch")
     parser.add_argument('--val_size', type=float, default=0.1, help="Percentage of training used as validation")
     parser.add_argument('--size', type=int, default=224, help="Input image hape of the Backbone")

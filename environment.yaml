@@ -1,4 +1,4 @@
-name: cdm
+name: lcbm
 channels:
   - conda-forge
   - defaults

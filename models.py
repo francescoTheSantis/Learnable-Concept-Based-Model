@@ -173,13 +173,17 @@ class Concept_Attention(torch.nn.Module):
         self.channels = channels
         self.bound = bound
         self.multi_dist = multi_dist
-        self.concept_encoder = concept_encoder
+
+        # Only 'attention' is supported. 
+        # TODO: test other approaches
+        self.concept_encoder = concept_encoder 
+
         self.expand_recon_bottleneck = expand_recon_bottleneck
         self.deep_parameterization = deep_parameterization
         self.fine_tune = fine_tune
         
         if self.bound > 0:
-            self.softsign = MaxNormActivation(bound**0.5) #nn.Tanh() #nn.Softsign()
+            self.softsign = MaxNormActivation(bound**0.5) 
         
         if backbone=='vgg':
             self.backbone = VGG().to(device)
@@ -195,9 +199,6 @@ class Concept_Attention(torch.nn.Module):
             self.in_features = 512
         else:
             raise ValueError('Backbone not implemented!')
-
-        #if not self.fine_tune:
-        #    freeze_params(self.backbone.parameters())
         
         if self.concept_encoder=='attention':
             self.concept_query = nn.Parameter(torch.randn(n_concepts, emb_size))
@@ -205,22 +206,6 @@ class Concept_Attention(torch.nn.Module):
                     nn.Linear(self.in_features, n_concepts * emb_size),
                     nn.ReLU(),
                     nn.Linear(n_concepts * emb_size, n_concepts * emb_size),
-                    #nn.LeakyReLU(0.1)
-            )
-            
-            #self.projector = nn.Linear(self.emb_size, 10, bias=False)
-
-        elif self.concept_encoder=='cem':
-            self.concept_prob_predictors = torch.nn.ModuleList()
-            for _ in range(self.n_concepts):
-                self.concept_prob_predictors.append(
-                    nn.Linear(self.emb_size, 1, bias=False)
-                )
-            self.concept_embedding_generator = torch.nn.Sequential(
-                    nn.Linear(self.in_features, self.n_concepts * self.emb_size),
-                    nn.ReLU(),
-                    nn.Linear(self.n_concepts * self.emb_size, self.n_concepts * self.emb_size),
-                    nn.LeakyReLU(0.1)
             )
         else:
             raise ValueError('Concept encoder not implemented!')
@@ -278,43 +263,26 @@ class Concept_Attention(torch.nn.Module):
         return bounded_tensor
     
     def get_prototypes(self):
-        if self.concept_encoder=='cem':
-            prototypes = []
-            for i, concept_predictor in enumerate(self.concept_prob_predictors):
-                prototypes.append(concept_prediction.weight.detach())
-            return torch.cat(prototypes, axis=0)
+        if self.bound > 0:
+            return self.apply_constraint(self.concept_query)
         else:
-            if self.bound > 0:
-                return self.apply_constraint(self.concept_query)
-            else:
-                return self.concept_query
+            return self.concept_query
     
     def encode(self, x):
         img_embedding = self.backbone(x)
         bsz = x.shape[0] 
-        if self.concept_encoder=='attention':
-            c_emb = self.concept_embedding_generator(img_embedding).view(-1, self.n_concepts, self.emb_size)
-            queries = self.concept_query
-            if self.bound > 0:
-                c_emb = self.apply_constraint(c_emb)
-                queries = self.apply_constraint(queries)
-            resized_queries = queries.unsqueeze(0).expand(bsz,-1,-1)
-            concept_dot_products = torch.bmm(resized_queries, c_emb.permute(0,2,1))
-            c_logit = torch.diagonal(concept_dot_products, dim1=-1, dim2=-2)
-            if self.multi_dist:
-                c_pred = F.gumbel_softmax(c_logit, tau=self.tau, hard=(not self.training)) 
-            else:
-                c_pred = self.reparameterize_bernoulli(c_logit, self.training) 
-        elif self.concept_encoder=='cem':
-            c_emb = self.concept_embedding_generator(img_embedding).view(-1, self.n_concepts, self.emb_size)
-            c_pred_list, c_logit_list = [], []
-            for i, concept_predictor in enumerate(self.concept_prob_predictors):
-                c_logits = concept_predictor(c_emb[:,i,:])
-                c_logit_list.append(c_logits.unsqueeze(1))
-                c_pred = self.reparameterize_bernoulli(c_logits, self.training)
-                c_pred_list.append(c_pred.unsqueeze(1))
-            c_pred = torch.cat(c_pred_list, axis=1)[:,:,0]
-            c_logit = torch.cat(c_logit_list, axis=1)[:,:,0]           
+        c_emb = self.concept_embedding_generator(img_embedding).view(-1, self.n_concepts, self.emb_size)
+        queries = self.concept_query
+        if self.bound > 0:
+            c_emb = self.apply_constraint(c_emb)
+            queries = self.apply_constraint(queries)
+        resized_queries = queries.unsqueeze(0).expand(bsz,-1,-1)
+        concept_dot_products = torch.bmm(resized_queries, c_emb.permute(0,2,1))
+        c_logit = torch.diagonal(concept_dot_products, dim1=-1, dim2=-2)
+        if self.multi_dist:
+            c_pred = F.gumbel_softmax(c_logit, tau=self.tau, hard=(not self.training)) 
+        else:
+            c_pred = self.reparameterize_bernoulli(c_logit, self.training)          
         return c_emb, c_pred, c_logit, img_embedding
     
     

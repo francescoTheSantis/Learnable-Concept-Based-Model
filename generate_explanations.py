@@ -15,7 +15,6 @@ def main(args):
     print(f'Device: {device}')
     
     path = f"results/concept_attention/{args.backbone}/{args.dataset}/{args.seed}"
-    #path = os.getcwd()
     print('Path:', path)
     
     # load concept attention
@@ -23,8 +22,6 @@ def main(args):
         print("Loading pre-trained concept attention")
     else:
         raise ValueError('There is no pre-trained concept attention!')
-        
-    #concept_attention = torch.load(f"{path}/concept_attention.pth")
 
     saved_model = torch.load(f'{path}/concept_attention.pth', weights_only=False, map_location=torch.device(f'cuda:{device}' if torch.cuda.is_available() else 'cpu'))
     model_args = {
@@ -124,16 +121,13 @@ def main(args):
     # generate table with images the lead to the highest concept activation
     learned_concepts(concept_attention, c_logits, test_dataset, 7, saved_args["n_concepts"], 
                      folder=path, dim=(8,8), device=device, alpha=0, classes=classes, concept_order=None)
-
-    # distribution of concept activation x class
-    #concept_dist_per_label(saved_args["n_labels"], y_preds, c_preds, folder=path, dim=(25,4))
     
     exp_path = f"{path}/explanations"
     if not os.path.exists(exp_path):
         os.makedirs(exp_path)   
     
     if args.dataset=='CUB200':
-        image_idxs = [5684, 224, 2128, 2507, 432] #+ list(np.random.choice(len(test_dataset), 10, replace=False))
+        image_idxs = list(np.random.choice(len(test_dataset), 10, replace=False))
     else:
         image_idxs = list(np.random.choice(len(test_dataset), 15, replace=False))
 
