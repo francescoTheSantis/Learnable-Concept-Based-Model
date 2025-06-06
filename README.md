@@ -60,9 +60,9 @@ bash run_explanations.sh
 These scripts cover concept alignment, interpretability metrics, and qualitative visualizations such as concept dictionaries and Grad-CAMs.
 
 ## Citation
-@article{de2025towards,
+<pre>@article{de2025towards,
   title={Towards Better Generalization and Interpretability in Unsupervised Concept-Based Models},
   author={De Santis, Francesco and Bich, Philippe and Ciravegna, Gabriele and Barbiero, Pietro and Giordano, Danilo and Cerquitelli, Tania},
   journal={arXiv preprint arXiv:2506.02092},
   year={2025}
-}
+}</pre>
