@@ -2,7 +2,7 @@
 # change the seed to perform multiple runs
 
 # MNIST Even-Odd
-python train_E2E.py --seed 0 --num_epochs 1 --batch_size 128 --n_labels 2 --backbone "resnet" --dataset "MNIST_even_odd" --lr 1e-4 --step_size 10 --gamma 0.1 --verbose 1
+python train_E2E.py --seed 0 --num_epochs 40 --batch_size 128 --n_labels 2 --backbone "resnet" --dataset "MNIST_even_odd" --lr 1e-4 --step_size 10 --gamma 0.1 --verbose 1
 
 # MNIST Addition
 #python train_E2E.py --seed 0 --num_epochs 40  --batch_size 128 --n_labels 19 --backbone "resnet" --dataset "MNIST_sum" --lr 1e-4 --step_size 10 --gamma 0.1 --verbose 1
