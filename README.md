@@ -48,7 +48,7 @@ bash bash_scripts/run_E2E.sh
 ```bash
 bash bash_scripts/run_LF_CBM.sh
 ```
-For this baseline, the concept have been extracted from GPT-4o and are reported into the `concept_list` folder.
+For this baseline, the concepts have been extracted from GPT-4o for each dataset and are reported into the `concept_list` folder.
 
 ⚠️ For other baselines (SENN, BotCL, etc.), we used the official repositories. We recommend doing the same for faithful reproduction.
 
