@@ -9,7 +9,7 @@ Published at **ECML PKDD 2025 (Research Track)**.
 
 We introduce **LCBM (Learnable Concept-Based Model)**, a novel **unsupervised concept-based model** for image classification that improves both **accuracy** and **interpretability**.
 
-Unlike prior approaches, LCBM learns a compact set of concepts represented as Bernoulli latent variables, each associated with an embedding to overcome the trade-off between performance and interpretability. LCBM achieves strong performance across multiple datasets and supports interpretable predictions through linear combinations of concept activations.
+LCBM learns a compact set of concepts represented as Bernoulli latent variables, each associated with an embedding to overcome the trade-off between performance and interpretability. LCBM achieves strong performance across multiple datasets and supports interpretable predictions through linear combinations of concept activations.
 
 ### Key Improvements
 - **Improved generalization**: Matches or exceeds prior unsupervised CBMs and approaches black-box performance.
